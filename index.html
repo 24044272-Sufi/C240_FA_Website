@@ -753,7 +753,13 @@
 
   sendBtn.addEventListener('click', async () => {
     if (fileContent === null) return;
-    const url = WEBHOOK_URL;
+    
+    // FIX 1: Read the current value of the input box right when clicked
+    const url = document.getElementById('webhook-url').value; 
+    if (!url) {
+      alert("Please enter a Webhook URL first.");
+      return;
+    }
 
     sendBtn.disabled = true;
     setConnector('sending', 'Sending…');
@@ -765,10 +771,15 @@
       const ext = (fileName.split('.').pop() || 'unknown').toLowerCase();
       const formData = new FormData();
       formData.append('file', selectedFile, fileName);
+      
+      // FIX 2: Move the metadata into FormData fields to avoid triggering an OPTIONS preflight
+      formData.append('contentKind', `file/${ext}`);
+
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'X-Content-Kind': `file/${ext}` },
         body: formData
+        // Notice: headers object is removed completely. 
+        // The browser will automatically manage Content-Type for FormData.
       });
 
       const raw = await res.text();
