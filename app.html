@@ -913,6 +913,8 @@
       
       // FIX 2: Move the metadata into FormData fields to avoid triggering an OPTIONS preflight
       formData.append('contentKind', `file/${ext}`);
+      formData.append('questionCount', window.selectedQuestionCount);
+      formData.append('difficulty', window.selectedDifficulty);
 
       const res = await fetch(url, {
         method: 'POST',
