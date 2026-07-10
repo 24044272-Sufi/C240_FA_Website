@@ -301,7 +301,7 @@
     transform: translateY(-1px);
   }
 
-  /* Connector: the signature element. Encodes live pipeline state. */
+  /* Connector */
   .connector {
     display: flex;
     flex-direction: column;
@@ -548,7 +548,6 @@
     font-weight: 500;
   }
 
-  /* Hex badge callback — pure CSS, no script hooks touched */
   .quiz-option.is-correct::after,
   .quiz-option.is-incorrect::after {
     content: '';
@@ -563,8 +562,67 @@
   .quiz-option.is-correct::after { background: var(--correct); }
   .quiz-option.is-incorrect::after { background: var(--incorrect); }
 
+  /* Confidence Radio Group */
+  .confidence-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .confidence-title {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-right: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .confidence-label {
+    cursor: pointer;
+    position: relative;
+  }
+
+  .confidence-label input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .confidence-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+
+  .confidence-label:hover .confidence-pill {
+    border-color: var(--teal-light);
+    color: var(--ink);
+  }
+
+  .confidence-label input:checked + .confidence-pill {
+    border-color: var(--teal-light);
+    background: var(--teal-light-soft);
+    color: var(--teal-light);
+    font-weight: 500;
+  }
+
+  .confidence-label input:focus-visible + .confidence-pill {
+    outline: 2px solid var(--teal-light);
+    outline-offset: 2px;
+  }
+
   .quiz-explanation {
-    margin: 12px 0 0;
+    margin: 14px 0 0;
     padding: 10px 12px;
     background: var(--bg);
     border-left: 3px solid var(--teal-light);
@@ -572,6 +630,31 @@
     font-size: 13px;
     line-height: 1.5;
     color: var(--ink-soft);
+  }
+
+  .submit-quiz-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #0B1414;
+    background: var(--teal-light);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .submit-quiz-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .submit-quiz-btn:not(:disabled):hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
   }
 
   #response-card {
@@ -640,19 +723,10 @@
       </div>
     </div>
 
-    <div class="field">
-      <label for="webhook-url">Webhook URL</label>
-      <input type="url" id="webhook-url" class="mono" placeholder="Please ask for the webhook URL" />
-    </div>
     <div class="file-chip" id="file-chip" hidden>
       <span class="mono" id="file-name"></span>
       <button type="button" class="remove-btn" id="remove-file">Remove</button>
     </div>
-
-    <div class="field">
-      <p class="mode-hint" id="mode-hint">Sent as <code class="mono">multipart/form-data</code>.</p>
-    </div>
-
     <button type="button" id="send-btn" class="send-btn" disabled>Send file</button>
   </section>
 
@@ -699,18 +773,15 @@
   let answeredCount = 0;
   let scoreCount = 0;
 
-  // TODO: replace with your actual webhook endpoint
-  const WEBHOOK_URL = document.getElementById('webhook-url').value;
-
   let fileContent = null;
   let fileName = null;
   let selectedFile = null;
-  const modeHint = document.getElementById('mode-hint');
+  // const modeHint = document.getElementById('mode-hint');
 
-  function updateModeHint() {
-    const ext = fileName ? fileName.split('.').pop().toLowerCase() : 'txt';
-    modeHint.innerHTML = `Sent as <code class="mono">multipart/form-data</code> with header <code class="mono">X-Content-Kind: file/${ext}</code>.`;
-  }
+  // function updateModeHint() {
+  //   const ext = fileName ? fileName.split('.').pop().toLowerCase() : 'txt';
+  //   modeHint.innerHTML = `Sent as <code class="mono">multipart/form-data</code> with header <code class="mono">X-Content-Kind: file/${ext}</code>.`;
+  // }
 
   function updateSendState() {
     sendBtn.disabled = fileContent === null;
@@ -737,7 +808,7 @@
       fileChip.hidden = false;
       dropzone.hidden = true;
       setConnector('', 'Idle');
-      updateModeHint();
+      // updateModeHint();
       updateSendState();
     };
     reader.onerror = () => {
@@ -822,6 +893,71 @@
     }
   }
 
+ // Parses user's inputs to build the array of items for review
+  async function generateReviewList() {
+    const reviewItems = [];
+    if (!quizData) return reviewItems;
+
+    quizData.forEach((q, i) => {
+      // Find what the user selected for this question
+      const selectedRadio = document.querySelector(`input[name="conf-q${i}"]:checked`);
+      if (selectedRadio) {
+        const val = selectedRadio.value;
+        // Only include "guessing" and "unsure"
+        if (val === 'guessing' || val === 'unsure') {
+          reviewItems.push({
+            question: q.question,
+            correct_answer: q.correct_answer,
+            confidence: val
+          });
+        }
+      }
+    });
+    
+    const payload = {
+      quizAnswers: reviewItems,
+    };
+
+    console.log("Items to review:", reviewItems);
+
+    try {
+      // 1. Await the fetch response
+      const response = await fetch('https://n8ngc.codeblazar.org/webhook/c240-fa-webflow-review-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+
+      // 2. Parse the response as a Binary Large Object (Blob)
+      const blob = await response.blob();
+
+      // 3. Create a local URL for the blob
+      const downloadUrl = window.URL.createObjectURL(blob);
+
+      // 4. Create a temporary anchor element to trigger the download
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = downloadUrl;
+      a.download = 'review_notes.csv'; // You can change this default filename
+
+      // 5. Append to the DOM, click it, and clean up
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+    } catch (error) {
+      console.error("Error generating review file:", error);
+      alert("Failed to download the review file. Please check the console for details.");
+    }
+
+    return reviewItems;
+  }
+
   function showQuiz(questions) {
     quizData = questions;
     answeredCount = 0;
@@ -834,6 +970,14 @@
     summary.className = 'quiz-summary';
     summary.id = 'quiz-summary';
     responseArea.appendChild(summary);
+
+    // Create Submit for Review button (disabled initially)
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'submit-quiz-btn';
+    submitBtn.textContent = 'Submit For Review';
+    submitBtn.disabled = true; // Button disabled out of the gate
+    submitBtn.addEventListener('click', generateReviewList);
 
     questions.forEach((q, i) => {
       const block = document.createElement('div');
@@ -877,10 +1021,57 @@
         options.appendChild(btn);
       });
 
+      // UI Only: Confidence Rating
+      const confidenceGroup = document.createElement('div');
+      confidenceGroup.className = 'confidence-group';
+      
+      const confTitle = document.createElement('span');
+      confTitle.className = 'confidence-title';
+      confTitle.textContent = 'Confidence:';
+      confidenceGroup.appendChild(confTitle);
+
+      const confOptions = [
+        { value: 'guessing', emoji: '🎲', text: 'Guessing' },
+        { value: 'unsure', emoji: '🤔', text: 'Unsure' },
+        { value: 'locked', emoji: '🔒', text: 'Locked In' }
+      ];
+
+      confOptions.forEach(opt => {
+        const label = document.createElement('label');
+        label.className = 'confidence-label';
+        
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `conf-q${i}`;
+        input.value = opt.value;
+        
+        // Listen for choices to unlock the submit button
+        input.addEventListener('change', () => {
+          // Check how many questions have a selected confidence rating
+          const totalSelected = responseArea.querySelectorAll('input[type="radio"]:checked').length;
+          // Enable button if all questions have a confidence selection
+          if (totalSelected === questions.length) {
+            submitBtn.disabled = false;
+          }
+        });
+
+        const pill = document.createElement('span');
+        pill.className = 'confidence-pill';
+        pill.textContent = `${opt.emoji} ${opt.text}`;
+        
+        label.appendChild(input);
+        label.appendChild(pill);
+        confidenceGroup.appendChild(label);
+      });
+
       block.appendChild(options);
+      block.appendChild(confidenceGroup);
       block.appendChild(explanation);
       responseArea.appendChild(block);
     });
+
+    // Append the submit button at the very end
+    responseArea.appendChild(submitBtn);
 
     updateQuizSummary(questions.length);
     retakeBtn.hidden = false;
@@ -893,12 +1084,13 @@
   sendBtn.addEventListener('click', async () => {
     if (fileContent === null) return;
     
-    // FIX 1: Read the current value of the input box right when clicked
-    const url = document.getElementById('webhook-url').value; 
-    if (!url) {
-      alert("Please enter a Webhook URL first.");
-      return;
-    }
+    // const url = document.getElementById('webhook-url').value; 
+    // if (!url) {
+    //   alert("Please enter a Webhook URL first.");
+    //   return;
+    // }
+
+    const url = "https://n8ngc.codeblazar.org/webhook/c240-fa-webflow-quiz-gen"
 
     sendBtn.disabled = true;
     setConnector('sending', 'Sending…');
@@ -910,8 +1102,6 @@
       const ext = (fileName.split('.').pop() || 'unknown').toLowerCase();
       const formData = new FormData();
       formData.append('file', selectedFile, fileName);
-      
-      // FIX 2: Move the metadata into FormData fields to avoid triggering an OPTIONS preflight
       formData.append('contentKind', `file/${ext}`);
       formData.append('questionCount', window.selectedQuestionCount);
       formData.append('difficulty', window.selectedDifficulty);
@@ -919,8 +1109,6 @@
       const res = await fetch(url, {
         method: 'POST',
         body: formData
-        // Notice: headers object is removed completely. 
-        // The browser will automatically manage Content-Type for FormData.
       });
 
       const raw = await res.text();
@@ -958,14 +1146,6 @@
 </script>
 
 <script>
-  // Question count / difficulty controls — UI only.
-  // Selected values are exposed on window.selectedQuestionCount and
-  // window.selectedDifficulty for whoever wires this into the webhook
-  // request, e.g.:
-  //   formData.append('questionCount', window.selectedQuestionCount);
-  //   formData.append('difficulty', window.selectedDifficulty);
-  // Deliberately kept out of the script above so that block stays untouched.
-
   window.selectedQuestionCount = '10';
   window.selectedDifficulty = 'medium';
 
