@@ -404,7 +404,7 @@
   .flashcard {
     background-color: transparent;
     width: 100%;
-    height: 380px; 
+    height: 440px; 
     perspective: 1000px;
     cursor: pointer;
   }
@@ -434,7 +434,6 @@
     border-radius: 12px;
     border: 1px solid var(--line);
     overflow-y: auto;
-    white-space: pre-wrap; 
     text-align: left; 
   }
 
@@ -447,6 +446,12 @@
     align-items: flex-start;
     justify-content: flex-start;
   }
+  
+  /* Apply pre-wrap strictly to the text container, not the flexbox */
+  .fc-question-text {
+    white-space: pre-wrap; 
+    width: 100%;
+  }
 
   .flashcard-back {
     background: var(--bg);
@@ -458,6 +463,47 @@
     justify-content: flex-start;
   }
   
+  /* Answer Sections */
+  .fc-ans-section {
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  
+  .fc-ans-label {
+    color: var(--ink-soft);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  
+  .fc-ans-text {
+    font-size: 14.5px;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: pre-wrap; 
+  }
+  
+  .fc-ans-text.is-correct { color: var(--correct); }
+  .fc-ans-text.is-incorrect { color: var(--incorrect); }
+  
+  .fc-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--line);
+    border: none;
+    margin: 4px 0 16px;
+  }
+  
+  .fc-explanation {
+    width: 100%;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+
   .flashcard-hint {
     position: absolute;
     bottom: 16px;
@@ -599,7 +645,7 @@
     .page { padding: 40px 16px 72px; }
     h1 { font-size: 24px; }
     .card { padding: 20px; }
-    .flashcard { height: 340px; }
+    .flashcard { height: 420px; }
   }
 </style>
 </head>
@@ -892,6 +938,7 @@
         card.confidence = reviewItems[i].confidence;
         card.original_question = reviewItems[i].original_question;
         card.correct_answer = reviewItems[i].correct_answer;
+        card.user_chosen_answer = reviewItems[i].user_chosen_answer;
         card.explanation = reviewItems[i].explanation;
       }
     });
@@ -928,7 +975,8 @@
     
     const cardFront = document.createElement('div');
     cardFront.className = 'flashcard-front';
-    const cardFrontText = document.createElement('span');
+    const cardFrontText = document.createElement('div');
+    cardFrontText.className = 'fc-question-text';
     cardFront.appendChild(cardFrontText);
     
     const frontHint = document.createElement('div');
@@ -940,6 +988,7 @@
     cardBack.className = 'flashcard-back';
     
     const cardBackText = document.createElement('div');
+    cardBackText.style.width = '100%';
     cardBack.appendChild(cardBackText);
     
     // Container for Retrospective Teaching Feature
@@ -997,13 +1046,53 @@
         cardFront.scrollTop = 0;
         cardBack.scrollTop = 0;
 
-        cardFrontText.textContent = cardsArray[currentIndex].front;
-        cardBackText.textContent = cardsArray[currentIndex].back;
+        const cardData = cardsArray[currentIndex];
+        
+        cardFrontText.textContent = cardData.front;
+        
+        // Dynamically build Flashcard Back with a solid UI structure
+        cardBackText.innerHTML = '';
+        
+        if (cardData.user_chosen_answer) {
+          const isCorrect = cardData.user_chosen_answer === cardData.correct_answer;
+          
+          // User's Answer Block
+          const userAnsDiv = document.createElement('div');
+          userAnsDiv.className = 'fc-ans-section';
+          userAnsDiv.innerHTML = `
+            <div class="fc-ans-label">Your Answer</div>
+            <div class="fc-ans-text ${isCorrect ? 'is-correct' : 'is-incorrect'}">${cardData.user_chosen_answer}</div>
+          `;
+          cardBackText.appendChild(userAnsDiv);
+
+          // Correct Answer Block (Only show if they got it wrong, or show always? Better if wrong)
+          if (!isCorrect && cardData.correct_answer) {
+            const correctAnsDiv = document.createElement('div');
+            correctAnsDiv.className = 'fc-ans-section';
+            correctAnsDiv.innerHTML = `
+              <div class="fc-ans-label">Correct Answer</div>
+              <div class="fc-ans-text is-correct">${cardData.correct_answer}</div>
+            `;
+            cardBackText.appendChild(correctAnsDiv);
+          }
+
+          // Visual Divider
+          const divider = document.createElement('hr');
+          divider.className = 'fc-divider';
+          cardBackText.appendChild(divider);
+        }
+
+        // Explanation Block
+        const expDiv = document.createElement('div');
+        expDiv.className = 'fc-explanation';
+        // Use locally tracked explanation if exists, else fallback to what CSV provided
+        expDiv.textContent = cardData.explanation || cardData.back;
+        cardBackText.appendChild(expDiv);
+        
         
         // Build Retrospective UI conditionally
         retroContainer.innerHTML = ''; // clear previous
         
-        const cardData = cardsArray[currentIndex];
         if (cardData && cardData.confidence) {
           const isConfident = cardData.confidence === 'locked';
           
@@ -1144,6 +1233,7 @@
             original_question: q.question, // raw text needed for Retro Teaching payload
             question: formattedQuestion,
             correct_answer: q.correct_answer,
+            user_chosen_answer: q.user_chosen_answer, // Storing what the user clicked
             explanation: q.explanation || "", // needed for Retro Teaching payload
             confidence: val
           });
@@ -1214,6 +1304,7 @@
     questions.forEach((q, i) => {
       // Initialize internal correctness tracking
       q.user_correct = undefined; 
+      q.user_chosen_answer = undefined;
 
       const block = document.createElement('div');
       block.className = 'quiz-question';
@@ -1242,7 +1333,9 @@
         btn.textContent = opt;
         btn.addEventListener('click', () => {
           const correct = opt === q.correct_answer;
+          
           q.user_correct = correct; // Record correctness on the object
+          q.user_chosen_answer = opt; // Record what the user clicked
 
           Array.from(options.children).forEach(b => { b.disabled = true; });
           btn.classList.add(correct ? 'is-correct' : 'is-incorrect');
